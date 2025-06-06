@@ -1,0 +1,74 @@
+2025-06-06 00:27:38,007 - __main__ - INFO -    - Modo: DESENVOLVIMENTO
+2025-06-06 00:27:38,007 - __main__ - INFO -    - Admins Configurados: 2
+2025-06-06 00:27:38,008 - __main__ - INFO - --- BOT INICIADO E PRONTO PARA RECEBER COMANDOS ---
+2025-06-06 00:28:08,513 - TeleBot - ERROR - Infinity polling: polling exited
+2025-06-06 00:28:08,514 - TeleBot - ERROR - Break infinity polling
+2025-06-06 01:07:14,538 - __main__ - INFO -    - Modo: DESENVOLVIMENTO
+2025-06-06 01:07:14,539 - __main__ - INFO -    - Admins Configurados: 2
+2025-06-06 01:07:14,539 - __main__ - INFO - --- BOT INICIADO E PRONTO PARA RECEBER COMANDOS ---
+2025-06-06 01:07:52,343 - TeleBot - ERROR - Infinity polling: polling exited
+2025-06-06 01:07:52,344 - TeleBot - ERROR - Break infinity polling
+2025-06-06 01:30:29,415 - __main__ - INFO -    - Modo: PRODUÇÃO
+2025-06-06 01:30:29,415 - __main__ - INFO -    - Admins Configurados: 2
+2025-06-06 01:30:29,415 - __main__ - INFO - --- BOT INICIADO E PRONTO PARA RECEBER COMANDOS ---
+2025-06-06 01:33:23,390 - __main__ - ERROR - ERRO CRÍTICO: A imagem 'imagem_pix.png' não foi encontrada! Enviando PIX como texto puro.
+2025-06-06 01:39:50,240 - TeleBot - ERROR - Infinity polling: polling exited
+2025-06-06 01:39:50,244 - TeleBot - ERROR - Break infinity polling
+2025-06-06 01:42:49,018 - __main__ - INFO -    - Modo: DESENVOLVIMENTO
+2025-06-06 01:42:49,019 - __main__ - INFO -    - Admins Configurados: 2
+2025-06-06 01:42:49,019 - __main__ - INFO - --- BOT INICIADO E PRONTO PARA RECEBER COMANDOS ---
+2025-06-06 02:11:35,165 - TeleBot - ERROR - Infinity polling: polling exited
+2025-06-06 02:11:35,166 - TeleBot - ERROR - Break infinity polling
+2025-06-06 02:13:10,291 - __main__ - INFO -    - Modo: DESENVOLVIMENTO
+2025-06-06 02:13:10,291 - __main__ - INFO -    - Admins Configurados: 2
+2025-06-06 02:13:10,291 - __main__ - INFO - --- BOT INICIADO E PRONTO PARA RECEBER COMANDOS ---
+2025-06-06 02:21:41,837 - TeleBot - ERROR - Infinity polling: polling exited
+2025-06-06 02:21:41,837 - TeleBot - ERROR - Break infinity polling
+2025-06-06 02:21:44,141 - __main__ - INFO -    - Modo: DESENVOLVIMENTO
+2025-06-06 02:21:44,141 - __main__ - INFO -    - Admins Configurados: 2
+2025-06-06 02:21:44,141 - __main__ - INFO - --- BOT INICIADO E PRONTO PARA RECEBER COMANDOS ---
+2025-06-06 02:22:18,064 - TeleBot - ERROR - Infinity polling: polling exited
+2025-06-06 02:22:18,065 - TeleBot - ERROR - Break infinity polling
+2025-06-06 02:23:11,711 - __main__ - INFO -    - Modo: DESENVOLVIMENTO
+2025-06-06 02:23:11,711 - __main__ - INFO -    - Admins Configurados: 2
+2025-06-06 02:23:11,711 - __main__ - INFO - --- BOT INICIADO E PRONTO PARA RECEBER COMANDOS ---
+2025-06-06 02:23:15,329 - TeleBot - ERROR - Threaded polling exception: A request to the Telegram API was unsuccessful. Error code: 400. Description: Bad Request: query is too old and response timeout expired or query ID is invalid
+2025-06-06 02:23:15,331 - TeleBot - ERROR - Exception traceback:
+Traceback (most recent call last):
+  File "G:\Sites\vender\Bot-gateway\FlexyPayBot\venv\Lib\site-packages\telebot\__init__.py", line 1235, in __threaded_polling
+    self.worker_pool.raise_exceptions()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "G:\Sites\vender\Bot-gateway\FlexyPayBot\venv\Lib\site-packages\telebot\util.py", line 150, in raise_exceptions
+    raise self.exception_info
+  File "G:\Sites\vender\Bot-gateway\FlexyPayBot\venv\Lib\site-packages\telebot\util.py", line 93, in run
+    task(*args, **kwargs)
+    ~~~~^^^^^^^^^^^^^^^^^
+  File "G:\Sites\vender\Bot-gateway\FlexyPayBot\venv\Lib\site-packages\telebot\__init__.py", line 9759, in _run_middlewares_and_handler
+    result = handler['function'](message)
+  File "G:\Sites\vender\Bot-gateway\FlexyPayBot\main.py", line 69, in handle_menu_callbacks
+    """
+  File "G:\Sites\vender\Bot-gateway\FlexyPayBot\venv\Lib\site-packages\telebot\__init__.py", line 6081, in answer_callback_query
+    return apihelper.answer_callback_query(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        self.token, callback_query_id, text=text, show_alert=show_alert, url=url, cache_time=cache_time)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "G:\Sites\vender\Bot-gateway\FlexyPayBot\venv\Lib\site-packages\telebot\apihelper.py", line 1871, in answer_callback_query
+    return _make_request(token, method_url, params=payload, method='post')
+  File "G:\Sites\vender\Bot-gateway\FlexyPayBot\venv\Lib\site-packages\telebot\apihelper.py", line 168, in _make_request
+    json_result = _check_result(method_name, result)
+  File "G:\Sites\vender\Bot-gateway\FlexyPayBot\venv\Lib\site-packages\telebot\apihelper.py", line 195, in _check_result
+    raise ApiTelegramException(method_name, result, result_json)
+telebot.apihelper.ApiTelegramException: A request to the Telegram API was unsuccessful. Error code: 400. Description: Bad Request: query is too old and response timeout expired or query ID is invalid
+
+2025-06-06 02:25:49,657 - TeleBot - ERROR - Infinity polling: polling exited
+2025-06-06 02:25:49,657 - TeleBot - ERROR - Break infinity polling
+2025-06-06 02:26:08,086 - __main__ - INFO -    - Modo: DESENVOLVIMENTO
+2025-06-06 02:26:08,086 - __main__ - INFO -    - Admins Configurados: 2
+2025-06-06 02:26:08,086 - __main__ - INFO - --- BOT INICIADO E PRONTO PARA RECEBER COMANDOS ---
+2025-06-06 02:31:20,940 - TeleBot - ERROR - Infinity polling: polling exited
+2025-06-06 02:31:20,941 - TeleBot - ERROR - Break infinity polling
+2025-06-06 02:31:23,256 - __main__ - INFO -    - Modo: DESENVOLVIMENTO
+2025-06-06 02:31:23,256 - __main__ - INFO -    - Admins Configurados: 2
+2025-06-06 02:31:23,256 - __main__ - INFO - --- BOT INICIADO E PRONTO PARA RECEBER COMANDOS ---
+2025-06-06 02:47:12,334 - TeleBot - ERROR - Infinity polling: polling exited
+2025-06-06 02:47:12,335 - TeleBot - ERROR - Break infinity polling
