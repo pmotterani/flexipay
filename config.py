@@ -1,31 +1,41 @@
-# config.py
+# config.py (Versão para Hospedagem no Railway)
 """
 ⚙️ Arquivo de Configuração Central
 ------------------------------------
 Este arquivo contém todas as variáveis, chaves de API, textos e parâmetros
-que controlam o comportamento do bot. Mantenha as chaves secretas no arquivo .env.
+que controlam o comportamento do bot. As chaves secretas são lidas do ambiente.
 """
 import os
 from dotenv import load_dotenv
 
-# Carrega as variáveis de ambiente do arquivo .env
+# Carrega as variáveis de ambiente do arquivo .env (para desenvolvimento local)
 load_dotenv()
 
 # =============================================
 # 🔑 CHAVES DE API E CONFIGURAÇÕES CRÍTICAS
 # =============================================
-# Token do seu bot, obtido com o @BotFather no Telegram.
+# Lidos diretamente do ambiente de produção (configurado no painel do Railway)
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-
-# Access Token da sua conta do Mercado Pago para processar pagamentos.
 MERCADOPAGO_ACCESS_TOKEN = os.getenv("MERCADOPAGO_ACCESS_TOKEN")
 
-# Nome do arquivo do banco de dados SQLite.
-DB_NAME = os.getenv("DB_NAME", "flexypay.db")
-
 # Define se o bot está em modo de produção. Afeta logs e avisos.
-# Defina como "true" no seu ambiente de produção.
 PRODUCTION = os.getenv("PRODUCTION", "False").lower() == "true"
+
+
+# --- LÓGICA DE CAMINHO PARA DADOS PERSISTENTES (RAILWAY) ---
+# No Railway, o volume persistente é montado em /data por padrão
+RAILWAY_DATA_DIR = "/data"
+
+# Verifica se estamos rodando no Railway (pela presença do diretório)
+if os.path.isdir(RAILWAY_DATA_DIR):
+    # Se sim, o caminho do banco de dados e do log será dentro do volume
+    DB_NAME = os.path.join(RAILWAY_DATA_DIR, "flexypay.db")
+    LOG_FILE_PATH = os.path.join(RAILWAY_DATA_DIR, "flexypay.log")
+else:
+    # Se não (rodando localmente), usa o caminho padrão na pasta do projeto
+    DB_NAME = "flexypay.db"
+    LOG_FILE_PATH = "flexypay.log"
+# --- FIM DA LÓGICA DE CAMINHO ---
 
 
 # =============================================
@@ -39,22 +49,15 @@ if admin_ids_str:
         # Converte a string de IDs separados por vírgula em uma lista de inteiros
         ADMIN_TELEGRAM_IDS = [int(admin_id.strip()) for admin_id in admin_ids_str.split(',')]
     except ValueError:
-        print("⚠️ ERRO: ADMIN_TELEGRAM_IDS no arquivo .env contém um valor inválido. Use números inteiros separados por vírgula.")
+        print("⚠️ ERRO: ADMIN_TELEGRAM_IDS no ambiente contém um valor inválido. Use números inteiros separados por vírgula.")
 
 
 # =============================================
 # 📊 CONFIGURAÇÕES FINANCEIRAS
 # =============================================
-# Taxa percentual cobrada sobre o valor do DEPÓSITO. (Ex: 0.10 para 10%)
 TAXA_DEPOSITO_PERCENTUAL = 0.11
-
-# Taxa percentual cobrada para SAQUES. (Ex: 0.05 para 5%)
 TAXA_SAQUE_PERCENTUAL = 0.025
-
-# Taxa fixa em R$ cobrada em CADA SAQUE, somada à percentual.
 TAXA_SAQUE_FIXA = 3.50
-
-# Limites para a criação de cobranças PIX.
 LIMITE_MINIMO_DEPOSITO = 7.50
 LIMITE_MAXIMO_DEPOSITO = 1000.00
 
@@ -85,7 +88,6 @@ HORARIO_SUPORTE = "08:00 às 20:00 (GMT-3)"
 # =============================================
 # 📜 MENSAGENS PADRÃO (COPY)
 # =============================================
-# Atualizado para um tom mais direto e focado em privacidade.
 COPY_INTRO = (
     f"🌐 *Bem-vindo(a) ao {NOME_BOT}: o BOT do PIX SEM RASTRO!*"
 )
@@ -96,7 +98,6 @@ MSG_BOAS_VINDAS = (
     "💼 Esquece burocracia, esquece regra — aqui você tem *liberdade total* pra movimentar sua grana como quiser."
 )
 
-# A VARIÁVEL QUE ESTAVA FALTANDO
 MSG_DIFERENCIAIS = (
     "\nNossos Diferenciais:\n"
     "✅ *Operações 100% Automatizadas*\n"
@@ -117,13 +118,13 @@ MSG_COMANDOS_BASE = (
 
 
 # =============================================
-# ❗️ VALIDAÇÕES FINAIS (Garante que o bot possa iniciar)
+# ❗ VALIDAÇÕES FINAIS (Garante que o bot possa iniciar)
 # =============================================
 if not TELEGRAM_BOT_TOKEN:
-    raise ValueError("FATAL: Token do Telegram não configurado. Defina a variável TELEGRAM_BOT_TOKEN no seu arquivo .env")
+    raise ValueError("FATAL: Token do Telegram não configurado. Defina a variável de ambiente TELEGRAM_BOT_TOKEN.")
 
 if not MERCADOPAGO_ACCESS_TOKEN and PRODUCTION:
-    print("AVISO: Token do Mercado Pago não configurado. Funcionalidades de pagamento estarão desativadas.")
+    print("AVISO: Token do Mercado Pago não configurado. Funcionalidades de pagamento podem não funcionar.")
 
-if not ADMIN_TELEGRAM_IDS:
+if not ADMIN_TELEGRAM_IDS and PRODUCTION:
     print("AVISO: Nenhum ADMIN_TELEGRAM_ID configurado. Funcionalidades administrativas não funcionarão.")
