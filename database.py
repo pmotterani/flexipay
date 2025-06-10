@@ -1,4 +1,4 @@
-# database.py (Versão para PostgreSQL)
+# database.py (Versão para PostgreSQL com novas funções de verificação)
 """
 🗃️ Módulo de Banco de Dados
 ---------------------------
@@ -8,7 +8,7 @@ Inclui criação de tabelas, CRUD de usuários e transações.
 import psycopg2
 from psycopg2.extras import DictCursor
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta # <<< Adicionado timedelta
 import config
 
 logger = logging.getLogger(__name__)
@@ -29,6 +29,7 @@ def init_db():
     """
     Inicializa o banco de dados, criando as tabelas se não existirem.
     """
+    # (A função init_db() permanece exatamente igual)
     with get_db_connection() as conn:
         with conn.cursor() as cursor:
             # Tabela de Usuários
@@ -60,6 +61,37 @@ def init_db():
         conn.commit()
     logger.info("✅ Banco de dados PostgreSQL inicializado e verificado com sucesso.")
 
+# <<< NOVA FUNÇÃO >>>
+def get_pending_pix_transactions(hours=2):
+    """Busca transações PIX pendentes das últimas 'hours' horas."""
+    with get_db_connection() as conn:
+        with conn.cursor(cursor_factory=DictCursor) as cursor:
+            try:
+                time_threshold = datetime.now() - timedelta(hours=hours)
+                sql = """
+                    SELECT * FROM transactions
+                    WHERE type = 'DEPOSIT' AND status = %s AND created_at >= %s
+                """
+                cursor.execute(sql, (config.STATUS_DEPOSITO_PENDENTE, time_threshold))
+                return cursor.fetchall()
+            except psycopg2.Error as e:
+                logger.error(f"❌ Erro ao buscar PIX pendentes: {e}", exc_info=True)
+                return []
+
+# <<< NOVA FUNÇÃO >>>
+def get_transaction_by_id_and_user(transaction_id, user_telegram_id):
+    """Busca uma transação pelo ID, garantindo que pertence ao usuário."""
+    with get_db_connection() as conn:
+        with conn.cursor(cursor_factory=DictCursor) as cursor:
+            try:
+                cursor.execute("SELECT * FROM transactions WHERE id = %s AND user_telegram_id = %s", (transaction_id, user_telegram_id))
+                return cursor.fetchone()
+            except psycopg2.Error as e:
+                logger.error(f"❌ Erro ao buscar transação {transaction_id} para usuário {user_telegram_id}: {e}", exc_info=True)
+                return None
+
+# (O restante do arquivo database.py, com as outras funções, continua aqui sem alterações...)
+# (admin_set_balance, get_users_with_balance, create_user_if_not_exists, etc...)
 def admin_set_balance(user_telegram_id, new_balance):
     """[ADMIN] Define um novo saldo para um usuário."""
     with get_db_connection() as conn:
@@ -208,7 +240,6 @@ def get_transaction_details(transaction_id):
                 logger.error(f"❌ Erro ao buscar detalhes da transação {transaction_id}: {e}", exc_info=True)
                 return None
 
-# Funções restantes (get_pending_withdrawals, calculate_profits, etc.) com placeholders %s
 def get_pending_withdrawals():
     """Retorna todas as transações de saque com status 'EM ANÁLISE'."""
     with get_db_connection() as conn:
@@ -269,5 +300,3 @@ def get_last_transaction_date(telegram_id):
             except psycopg2.Error as e:
                 logger.error(f"❌ Erro ao buscar última data de transação para {telegram_id}: {e}", exc_info=True)
                 return "Erro ao consultar"
-
-init_db()
