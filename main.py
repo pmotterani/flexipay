@@ -1,23 +1,22 @@
-# main.py
+# main.py (Versão com Verificador Periódico e sem Webhook)
 """
 🌐 FlexiPay Bot
 ---------------
 Sistema completo de movimentação financeira via Telegram com foco em
 privacidade, automação e facilidade de uso.
 """
-
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 import logging
 from logging.handlers import RotatingFileHandler
-import base64
-from io import BytesIO
+import threading
+import time
 
 # Módulos internos do projeto
-import config      # ⚙️ Configurações, chaves e mensagens
-import database    # 🗃️ Operações com banco de dados
-import pay         # 💳 Integração com gateway de pagamento
-import adm         # 👑 Funções administrativas
+import config
+import database
+import pay
+import adm
 
 # =============================================
 # 📜 CONFIGURAÇÃO DE LOGGING
@@ -45,11 +44,11 @@ logger.info(f"   - Admins Configurados: {len(config.ADMIN_TELEGRAM_IDS)}")
 # =============================================
 # 🎬 FUNÇÃO PARA CRIAR O MENU PRINCIPAL
 # =============================================
+# (A função criar_menu_principal() permanece exatamente igual)
 def criar_menu_principal():
     """Cria e retorna o teclado do menu principal com botões interativos."""
     markup = InlineKeyboardMarkup(row_width=2)
     
-    # Botões do menu
     btn_depositar = InlineKeyboardButton("📥 Depositar (PIX)", callback_data="menu_depositar")
     btn_sacar = InlineKeyboardButton("📤 Sacar", callback_data="menu_sacar")
     btn_carteira = InlineKeyboardButton("💼 Minha Carteira", callback_data="menu_carteira")
@@ -58,7 +57,86 @@ def criar_menu_principal():
     btn_canal = InlineKeyboardButton("📢 Canal", callback_data="menu_canal")
 
     markup.add(btn_depositar, btn_sacar, btn_carteira, btn_taxas, btn_suporte, btn_canal)
+    # Adicionando o botão de verificação ao menu
+    btn_verificar = InlineKeyboardButton("🔄 Verificar PIX", callback_data="menu_verificar")
+    markup.add(btn_verificar)
     return markup
+
+# =============================================
+# 🛠️ FUNÇÃO AUXILIAR PARA PROCESSAR PAGAMENTOS
+# =============================================
+def processar_pagamento_aprovado(transaction):
+    """
+    Função centralizada que processa um pagamento de depósito aprovado.
+    Atualiza saldo, registra taxas e notifica o usuário.
+    Retorna True se o processamento foi bem-sucedido.
+    """
+    if not transaction or transaction['status'] != config.STATUS_DEPOSITO_PENDENTE:
+        return False
+
+    user_id = transaction['user_telegram_id']
+    valor_deposito = transaction['amount']
+    transaction_id = transaction['id']
+
+    # Lógica de taxa de depósito
+    taxa_deposito = valor_deposito * config.TAXA_DEPOSITO_PERCENTUAL
+    valor_liquido = valor_deposito - taxa_deposito
+
+    # Operação atômica para garantir consistência
+    conn_atomic = database.get_db_connection()
+    try:
+        # Credita o valor líquido na carteira do usuário
+        database.update_balance(user_id, valor_liquido, conn_ext=conn_atomic)
+        
+        # Registra a taxa para cálculo de lucro
+        database.record_transaction(
+            user_telegram_id=user_id, type="FEE", amount=taxa_deposito,
+            status=config.STATUS_CONCLUIDO,
+            admin_notes=f"Taxa de depósito referente à transação ID {transaction_id}",
+            conn_ext=conn_atomic
+        )
+        
+        # Atualiza o status da transação de depósito original para PAGO
+        database.update_transaction_status(transaction_id, config.STATUS_DEPOSITO_PAGO, conn_ext=conn_atomic)
+        
+        conn_atomic.commit()
+        logger.info(f"✅ Depósito ID {transaction_id} para user {user_id} APROVADO. Valor creditado: R${valor_liquido:.2f}")
+
+        # Notifica o usuário
+        bot.send_message(user_id, f"✅ Seu depósito de R$ {valor_deposito:.2f} foi confirmado com sucesso!\n\n+ *R$ {valor_liquido:.2f}* foram adicionados à sua carteira.\nID da Transação: `{transaction_id}`")
+        return True
+
+    except Exception as e:
+        if conn_atomic: conn_atomic.rollback()
+        logger.critical(f"🆘 FALHA CRÍTICA ao processar depósito para ID {transaction_id}: {e}")
+        return False
+    finally:
+        if conn_atomic: conn_atomic.close()
+
+# =============================================
+# 🤖 LÓGICA DO VERIFICADOR AUTOMÁTICO
+# =============================================
+def verificador_pix_periodico():
+    """
+    Esta função roda em uma thread separada, verificando PIX pendentes
+    periodicamente.
+    """
+    logger.info("🤖 Verificador periódico de PIX iniciado.")
+    while True:
+        try:
+            pending_transactions = database.get_pending_pix_transactions(hours=2)
+            if pending_transactions:
+                logger.info(f"Verificando {len(pending_transactions)} transações PIX pendentes...")
+                for trans in pending_transactions:
+                    payment_details = pay.get_payment_details(trans['mercado_pago_id'])
+                    if payment_details and payment_details.get("status") == "approved":
+                        logger.info(f"Transação pendente {trans['id']} foi paga. Processando...")
+                        processar_pagamento_aprovado(trans)
+        except Exception as e:
+            logger.error(f"💥 Erro no laço do verificador periódico de PIX: {e}", exc_info=True)
+        
+        # Aguarda 20 segundos para a próxima verificação
+        time.sleep(20)
 
 # =============================================
 # 🏷️ HANDLERS DE COMANDOS DO USUÁRIO
@@ -66,16 +144,10 @@ def criar_menu_principal():
 
 @bot.message_handler(commands=['start', 'help'])
 def handle_start(message):
-    """
-    Handler para /start e /help. Exibe a mensagem de boas-vindas com o menu de botões.
-    """
     user = message.from_user
     logger.info(f"👋 Usuário {user.id} ('{user.first_name}') iniciou o bot.")
     database.create_user_if_not_exists(user.id, user.username, user.first_name)
-    
     saldo = database.get_balance(user.id)
-    
-    # Mensagem de boas-vindas com saldo e botões
     welcome_text = (
         f"Olá, *{user.first_name}*!\n"
         f"Seu saldo atual é de *R$ {saldo:.2f}*.\n\n"
@@ -83,17 +155,60 @@ def handle_start(message):
     )
     bot.reply_to(message, welcome_text, reply_markup=criar_menu_principal())
 
+# <<< NOVO COMANDO >>>
+@bot.message_handler(commands=['verificar'])
+def handle_verificar_command(message):
+    user_id = message.from_user.id
+    parts = message.text.split()
+
+    if len(parts) < 2:
+        bot.reply_to(message, "⚠️ Uso incorreto!\nPor favor, envie o comando no formato:\n`/verificar <ID da Transação>`")
+        return
+
+    try:
+        transaction_id = int(parts[1])
+    except (ValueError, IndexError):
+        bot.reply_to(message, "❌ ID inválido. O ID da transação deve ser um número.")
+        return
+
+    bot.send_chat_action(message.chat.id, 'typing')
+    
+    transaction = database.get_transaction_by_id_and_user(transaction_id, user_id)
+
+    if not transaction:
+        bot.reply_to(message, f"❌ Transação com ID `{transaction_id}` não encontrada ou não pertence a você.")
+        return
+
+    if transaction['status'] == config.STATUS_DEPOSITO_PAGO:
+        bot.reply_to(message, f"✅ A transação `{transaction_id}` já foi confirmada e o valor creditado.")
+        return
+        
+    if transaction['status'] != config.STATUS_DEPOSITO_PENDENTE:
+        bot.reply_to(message, f"ℹ️ A transação `{transaction_id}` não está pendente de pagamento (Status: {transaction['status']}).")
+        return
+
+    # Se a transação está pendente, verifica no gateway
+    payment_details = pay.get_payment_details(transaction['mercado_pago_id'])
+    
+    if payment_details and payment_details.get("status") == "approved":
+        logger.info(f"Verificação manual para transação {transaction_id} foi bem-sucedida. Processando...")
+        if processar_pagamento_aprovado(transaction):
+            bot.reply_to(message, f"Ótima notícia! Verificamos e confirmamos seu pagamento para a transação `{transaction_id}`.")
+        else:
+            bot.reply_to(message, f"🆘 Encontramos o pagamento para a transação `{transaction_id}`, mas ocorreu um erro crítico ao creditar o valor. Contate o suporte.")
+    else:
+        status_gateway = payment_details.get("status", "desconhecido") if payment_details else "não encontrado"
+        bot.reply_to(message, f"⌛ A transação `{transaction_id}` ainda está aguardando pagamento no gateway (Status: {status_gateway}). Tente novamente em alguns instantes.")
+
+
 # =============================================
 # 📞 HANDLER PARA CALLBACKS DOS BOTÕES
 # =============================================
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('menu_'))
 def handle_menu_callbacks(call):
-    """Processa os cliques nos botões do menu principal."""
     action = call.data.split('_')[1]
     message = call.message
-
-    # Responde ao clique para o Telegram saber que foi processado
     bot.answer_callback_query(call.id)
 
     if action == "depositar":
@@ -108,12 +223,11 @@ def handle_menu_callbacks(call):
         handle_suporte(message, from_button=True)
     elif action == "canal":
         handle_canal(message, from_button=True)
+    elif action == "verificar":
+        bot.send_message(message.chat.id, "🔄 Para verificar manualmente um PIX pendente, use o comando:\n`/verificar <ID da Transação>`")
 
-# =============================================
-# LÓGICA DOS COMANDOS
-# =============================================
-# (As funções abaixo agora podem ser chamadas pelos botões ou pelos comandos)
 
+# (As funções handle_carteira, handle_pix_deposit, handle_saque, etc. permanecem iguais)
 @bot.message_handler(commands=['carteira'])
 def handle_carteira(message, from_button=False):
     """Exibe o saldo atual e informações da carteira do usuário."""
@@ -190,24 +304,17 @@ def handle_pix_deposit(message, from_button=False):
             f"Valor a pagar: *R$ {valor:.2f}*\n"
             f"ID da Transação: `{transaction_id}`\n\n"
             f"👇 *Copie o código abaixo e pague no seu app do banco:*\n"
-            f"`{pix_data['pix_copy_paste']}`"
+            f"`{pix_data['pix_copy_paste']}`\n\n"
+            f"🔄 _Após o pagamento, seu saldo será atualizado automaticamente. Se preferir, use /verificar `{transaction_id}` para confirmar manualmente._"
         )
-
-        # --- LÓGICA DE ENVIO DA IMAGEM FIXA ---
-        # Tenta enviar a sua imagem personalizada com o texto do PIX na legenda.
+        
+        # Lógica de envio da imagem (se houver)
         try:
-            # O nome do arquivo deve ser exatamente o que você salvou na pasta do projeto
             with open('pix.jpg', 'rb') as foto_fixa:
                 bot.send_photo(message.chat.id, photo=foto_fixa, caption=msg_pix_caption)
-            
-            logger.info(f"✅ PIX de R${valor:.2f} enviado com IMAGEM FIXA para usuário {user.id}.")
-
         except FileNotFoundError:
-            # Se a imagem não for encontrada, o bot não trava.
-            # Ele envia uma mensagem de texto simples para não perder a transação.
-            logger.error("ERRO CRÍTICO: A imagem 'imagem_pix.png' não foi encontrada! Enviando PIX como texto puro.")
+            logger.warning("Imagem 'pix.jpg' não encontrada. Enviando PIX como texto.")
             bot.send_message(message.chat.id, msg_pix_caption)
-        # --- FIM DA LÓGIca DE ENVIO ---
 
     except ValueError:
         bot.reply_to(message, "❌ Valor inválido. Use apenas números. Ex: `/pix 50.75`")
@@ -231,7 +338,6 @@ def handle_saque(message):
     
     try:
         valor_total_debito = float(parts[2].replace(',', '.'))
-        # (Lógica completa de saque que já fizemos)
         if valor_total_debito <= config.TAXA_SAQUE_FIXA:
             bot.reply_to(message, f"❌ O valor a debitar deve ser maior que a taxa fixa de R$ {config.TAXA_SAQUE_FIXA:.2f}.")
             return
@@ -318,11 +424,16 @@ def handle_canal(message, from_button=False):
     bot.send_message(message.chat.id, channel_msg, disable_web_page_preview=True)
 
 # =============================================
-# ▶️ INICIAR O BOT
+# ▶️ INICIAR O BOT E O VERIFICADOR
 # =============================================
 if __name__ == '__main__':
+    # Inicia o verificador periódico em uma thread separada
+    checker_thread = threading.Thread(target=verificador_pix_periodico, daemon=True)
+    checker_thread.start()
+    
     logger.info("--- BOT INICIADO E PRONTO PARA RECEBER COMANDOS ---")
     try:
+        # Inicia o polling do bot
         bot.infinity_polling(timeout=30, long_polling_timeout=5)
     except Exception as e:
         logger.critical(f"🆘 O BOT PAROU DE FUNCIONAR! Erro fatal no polling: {e}", exc_info=True)
