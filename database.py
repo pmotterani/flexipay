@@ -25,11 +25,12 @@ def get_db_connection():
         logger.critical(f"FATAL: Não foi possível conectar ao banco de dados PostgreSQL: {e}", exc_info=True)
         raise
 
+# Em database.py
+
 def init_db():
     """
     Inicializa o banco de dados, criando as tabelas se não existirem.
     """
-    # (A função init_db() permanece exatamente igual)
     with get_db_connection() as conn:
         with conn.cursor() as cursor:
             # Tabela de Usuários
@@ -38,7 +39,7 @@ def init_db():
                     telegram_id BIGINT PRIMARY KEY,
                     username TEXT,
                     first_name TEXT,
-                    balance REAL DEFAULT 0.00,
+                    balance NUMERIC(15, 2) DEFAULT 0.00,  -- <<< ALTERADO DE REAL PARA NUMERIC
                     created_at TIMESTAMPTZ NOT NULL
                 )
             ''')
@@ -48,7 +49,7 @@ def init_db():
                     id SERIAL PRIMARY KEY,
                     user_telegram_id BIGINT NOT NULL,
                     type TEXT NOT NULL,
-                    amount REAL NOT NULL,
+                    amount NUMERIC(15, 2) NOT NULL,        -- <<< ALTERADO DE REAL PARA NUMERIC
                     status TEXT NOT NULL,
                     pix_key TEXT,
                     mercado_pago_id TEXT,
