@@ -6,18 +6,6 @@
   "deploy": {
     "startCommand": "python main.py",
     "restartPolicyType": "ON_FAILURE",
-    "restartPolicyMaxRetries": 10,
-    "services": {
-      "bot": {
-        "startCommand": "python main.py"
-      },
-      "webhook": {
-        "startCommand": "gunicorn --worker-tmp-dir /tmp -b 0.0.0.0:$PORT webhook_server:app",
-        "healthcheckPath": "/webhook/mp",
-        "healthcheckMethod": "POST",
-        "restartPolicyType": "ON_FAILURE",
-        "restartPolicyMaxRetries": 10
-      }
-    }
+    "restartPolicyMaxRetries": 10
   }
 }
