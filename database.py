@@ -281,12 +281,42 @@ def get_pending_withdrawals():
                 return []
 
 def calculate_profits():
-    """Calcula o lucro total somando todas as transações do tipo 'FEE'."""
+    """
+    Calcula o lucro total somando as taxas de transações CONCLUÍDAS.
+    - Taxas de depósito são contadas diretamente.
+    - Taxas de saque são contadas apenas se o saque correspondente foi concluído.
+    """
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=DictCursor) as cursor:
             try:
-                cursor.execute("SELECT SUM(amount) FROM transactions WHERE type = 'FEE' AND status = %s", (config.STATUS_CONCLUIDO,))
+                # Esta consulta SQL usa uma subconsulta para garantir que apenas as taxas
+                # de saques bem-sucedidos sejam incluídas no cálculo do lucro.
+                # É específica para PostgreSQL devido ao uso de SUBSTRING com expressão regular.
+                sql_query = """
+                    SELECT COALESCE(SUM(T1.amount), 0.00)
+                    FROM transactions T1
+                    WHERE T1.type = 'FEE' AND T1.status = %s AND (
+                        -- Sempre conta as taxas de depósito, pois são criadas no sucesso.
+                        T1.admin_notes LIKE 'Taxa de depósito%%'
+                        OR
+                        -- Só conta taxas de saque se o saque correspondente foi CONCLUÍDO.
+                        (
+                            T1.admin_notes LIKE 'Taxa referente ao saque ID %%'
+                            AND
+                            EXISTS (
+                                SELECT 1
+                                FROM transactions T2
+                                WHERE T2.type = 'WITHDRAWAL'
+                                  AND T2.status = %s
+                                  -- Extrai o ID da nota e converte para integer para a correspondência.
+                                  AND T2.id = CAST(substring(T1.admin_notes from '(\\d+)$') AS INTEGER)
+                            )
+                        )
+                    )
+                """
+                cursor.execute(sql_query, (config.STATUS_CONCLUIDO, config.STATUS_CONCLUIDO))
                 result = cursor.fetchone()
+                # Retorna o resultado da soma. Se não houver, retorna 0.00.
                 return result[0] if result and result[0] is not None else 0.00
             except psycopg2.Error as e:
                 logger.error(f"❌ Erro ao calcular lucro: {e}", exc_info=True)
