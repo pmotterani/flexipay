@@ -344,9 +344,10 @@ def handle_saque(message):
 
         valor_a_receber = round((valor_total_debito - config.TAXA_SAQUE_FIXA) / (1 + config.TAXA_SAQUE_PERCENTUAL), 2)
         
-        if valor_a_receber <= 0:
-             bot.reply_to(message, f"❌ O valor a debitar é muito baixo e não resulta em um saque válido.")
-             return
+        # <<< NEW: Minimum withdrawal validation >>>
+        if valor_a_receber < config.LIMITE_MINIMO_SAQUE:
+            bot.reply_to(message, f"❌ *Valor Mínimo Não Atingido!*\nO valor líquido a receber deve ser de pelo menos *R$ {config.LIMITE_MINIMO_SAQUE:.2f}*.")
+            return
         
         taxa_final = round(valor_total_debito - valor_a_receber, 2)
         saldo_atual = database.get_balance(user.id)
@@ -356,23 +357,22 @@ def handle_saque(message):
             return
 
         conn = database.get_db_connection()
-        # conn.execute("BEGIN") # <--- THIS LINE IS REMOVED
         try:
             # The transaction starts automatically with this first database call
-            database.update_balance(user.id, -valor_total_debito, conn_ext=conn)
-            
+            if not database.update_balance(user.id, -valor_total_debito, conn_ext=conn):
+                 # This handles the case where the balance would go negative, which should be caught earlier, but is a good safeguard.
+                 raise Exception("Falha ao atualizar o saldo, possivelmente resultando em saldo negativo.")
+
             transaction_id = database.record_transaction(
                 conn_ext=conn, user_telegram_id=user.id, type="WITHDRAWAL",
                 amount=valor_a_receber, status=config.STATUS_EM_ANALISE, pix_key=chave_pix
             )
-            
             database.record_transaction(
                 conn_ext=conn, user_telegram_id=user.id, type="FEE",
                 amount=taxa_final, status=config.STATUS_CONCLUIDO,
                 admin_notes=f"Taxa referente ao saque ID {transaction_id}"
             )
             
-            # This commits the entire transaction
             conn.commit()
             
             adm.notify_admin_of_withdrawal_request(transaction_id, user.id, user.first_name, valor_a_receber, chave_pix)
@@ -384,7 +384,7 @@ def handle_saque(message):
                          f"🔑 Chave PIX: `{chave_pix}`\n"
                          f"🆔 ID: `{transaction_id}`")
         except Exception as e_atomic:
-            conn.rollback()
+            if conn: conn.rollback()
             logger.critical(f"💥 Erro atômico no /sacar para {user.id}: {e_atomic}", exc_info=True)
             bot.reply_to(message, "❌ Erro crítico ao registrar sua solicitação. Nenhum valor foi debitado.")
         finally:
@@ -395,7 +395,7 @@ def handle_saque(message):
     except Exception as e:
         logger.error(f"💥 Erro inesperado no /sacar para {user.id}: {e}", exc_info=True)
         bot.reply_to(message, "❌ Ocorreu um erro inesperado.")
-
+        
 @bot.message_handler(commands=['taxa'])
 def handle_taxa(message, from_button=False):
     """Exibe as taxas de operação de forma clara para o usuário."""
