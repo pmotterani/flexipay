@@ -59,6 +59,8 @@ TAXA_SAQUE_FIXA = 3.50
 LIMITE_MINIMO_DEPOSITO = 7.50
 LIMITE_MAXIMO_DEPOSITO = 1000.00
 
+LIMITE_MINIMO_SAQUE = 10.00 # <<< NEW SETTING
+
 
 # =============================================
 # 🏷️ STATUS DE TRANSAÇÕES (Uso interno)
