@@ -191,32 +191,12 @@ def update_balance(telegram_id, amount_change, conn_ext=None):
     finally:
         if conn_ext is None and conn: conn.close()
 
-def record_transaction(**kwargs):
-    """Registra uma nova transação no banco de dados."""
-    conn = kwargs.pop('conn_ext', None) or get_db_connection()
-    now = datetime.now()
-    kwargs.setdefault('pix_key', None); kwargs.setdefault('mercado_pago_id', None); kwargs.setdefault('admin_notes', None)
-    kwargs['created_at'] = now; kwargs['updated_at'] = now
-    try:
-        with conn.cursor(cursor_factory=DictCursor) as cursor:
-            columns = ', '.join(kwargs.keys())
-            placeholders = ', '.join(['%s'] * len(kwargs))
-            sql = f"INSERT INTO transactions ({columns}) VALUES ({placeholders}) RETURNING id"
-            cursor.execute(sql, tuple(kwargs.values()))
-            transaction_id = cursor.fetchone()['id']
-            if 'conn_ext' not in kwargs: conn.commit()
-            logger.info(f"📄 Transação {transaction_id} (Tipo: {kwargs['type']}) registrada para usuário {kwargs['user_telegram_id']}.")
-            return transaction_id
-    except psycopg2.Error as e:
-        logger.error(f"❌ Erro ao registrar transação para {kwargs.get('user_telegram_id')}: {e}", exc_info=True)
-        if 'conn_ext' not in kwargs and conn: conn.rollback()
-        return None
-    finally:
-        if 'conn_ext' not in kwargs and conn: conn.close()
-
 def update_transaction_status(transaction_id, new_status, **kwargs):
     """Atualiza o status e outros campos de uma transação."""
-    conn = kwargs.pop('conn_ext', None) or get_db_connection()
+    # <<< 1. FIX: Apply the same logic here.
+    is_external_conn = 'conn_ext' in kwargs
+    conn = kwargs.pop('conn_ext') if is_external_conn else get_db_connection()
+
     fields_to_update = ["status = %s", "updated_at = %s"]
     values = [new_status, datetime.now()]
     if 'mp_id' in kwargs:
@@ -230,15 +210,53 @@ def update_transaction_status(transaction_id, new_status, **kwargs):
         with conn.cursor() as cursor:
             sql = f"UPDATE transactions SET {', '.join(fields_to_update)} WHERE id = %s"
             cursor.execute(sql, tuple(values))
-            if 'conn_ext' not in kwargs: conn.commit()
+            
+            # <<< 2. FIX: Use the boolean flag here as well.
+            if not is_external_conn:
+                conn.commit()
+                
         logger.info(f"🔄 Status da transação {transaction_id} atualizado para '{new_status}'.")
         return True
     except psycopg2.Error as e:
         logger.error(f"❌ Erro ao atualizar status da transação {transaction_id}: {e}", exc_info=True)
-        if 'conn_ext' not in kwargs and conn: conn.rollback()
+        if not is_external_conn and conn:
+            conn.rollback()
         return False
     finally:
-        if 'conn_ext' not in kwargs and conn: conn.close()
+        if not is_external_conn and conn:
+            conn.close()
+
+def record_transaction(**kwargs):
+    """Registra uma nova transação no banco de dados."""
+    # <<< 1. FIX: Check for the external connection BEFORE removing it from kwargs.
+    is_external_conn = 'conn_ext' in kwargs
+    conn = kwargs.pop('conn_ext') if is_external_conn else get_db_connection()
+    
+    now = datetime.now()
+    kwargs.setdefault('pix_key', None); kwargs.setdefault('mercado_pago_id', None); kwargs.setdefault('admin_notes', None)
+    kwargs['created_at'] = now; kwargs['updated_at'] = now
+    try:
+        with conn.cursor(cursor_factory=DictCursor) as cursor:
+            columns = ', '.join(kwargs.keys())
+            placeholders = ', '.join(['%s'] * len(kwargs))
+            sql = f"INSERT INTO transactions ({columns}) VALUES ({placeholders}) RETURNING id"
+            cursor.execute(sql, tuple(kwargs.values()))
+            transaction_id = cursor.fetchone()['id']
+            
+            # <<< 2. FIX: Use the boolean flag to decide whether to commit.
+            if not is_external_conn:
+                conn.commit()
+                
+            logger.info(f"📄 Transação {transaction_id} (Tipo: {kwargs['type']}) registrada para usuário {kwargs['user_telegram_id']}.")
+            return transaction_id
+    except psycopg2.Error as e:
+        logger.error(f"❌ Erro ao registrar transação para {kwargs.get('user_telegram_id')}: {e}", exc_info=True)
+        if not is_external_conn and conn:
+            conn.rollback()
+        return None
+    finally:
+        if not is_external_conn and conn:
+            conn.close()
 
 def get_transaction_details(transaction_id):
     """Busca todos os detalhes de uma transação pelo seu ID."""
