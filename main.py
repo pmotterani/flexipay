@@ -356,19 +356,25 @@ def handle_saque(message):
             return
 
         conn = database.get_db_connection()
-        conn.execute("BEGIN")
+        # conn.execute("BEGIN") # <--- THIS LINE IS REMOVED
         try:
+            # The transaction starts automatically with this first database call
             database.update_balance(user.id, -valor_total_debito, conn_ext=conn)
+            
             transaction_id = database.record_transaction(
                 conn_ext=conn, user_telegram_id=user.id, type="WITHDRAWAL",
                 amount=valor_a_receber, status=config.STATUS_EM_ANALISE, pix_key=chave_pix
             )
+            
             database.record_transaction(
                 conn_ext=conn, user_telegram_id=user.id, type="FEE",
                 amount=taxa_final, status=config.STATUS_CONCLUIDO,
                 admin_notes=f"Taxa referente ao saque ID {transaction_id}"
             )
+            
+            # This commits the entire transaction
             conn.commit()
+            
             adm.notify_admin_of_withdrawal_request(transaction_id, user.id, user.first_name, valor_a_receber, chave_pix)
             bot.reply_to(message,
                          f"✅ *Solicitação de saque enviada!*\n\n"
@@ -383,6 +389,7 @@ def handle_saque(message):
             bot.reply_to(message, "❌ Erro crítico ao registrar sua solicitação. Nenhum valor foi debitado.")
         finally:
             if conn: conn.close()
+            
     except ValueError:
         bot.reply_to(message, "❌ Valor inválido. Ex: `/sacar chave@pix.com 100`")
     except Exception as e:
