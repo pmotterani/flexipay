@@ -10,6 +10,7 @@ from psycopg2.extras import DictCursor
 import logging
 from datetime import datetime, timedelta # <<< Adicionado timedelta
 import config
+import decimal # <<< 1. IMPORT ADDED
 
 logger = logging.getLogger(__name__)
 
@@ -165,11 +166,20 @@ def update_balance(telegram_id, amount_change, conn_ext=None):
         with conn.cursor(cursor_factory=DictCursor) as cursor:
             cursor.execute("SELECT balance FROM users WHERE telegram_id = %s FOR UPDATE", (telegram_id,))
             result = cursor.fetchone()
-            current_balance = result['balance'] if result else 0.0
-            new_balance = current_balance + amount_change
+            
+            # <<< 2. MODIFIED BLOCK START >>>
+            current_balance = result['balance'] if result else decimal.Decimal('0.00')
+            
+            # Convert float to Decimal for safe addition/subtraction
+            decimal_amount_change = decimal.Decimal(str(amount_change))
+            new_balance = current_balance + decimal_amount_change
+            
             if new_balance < 0:
                 logger.warning(f"⚠️ Tentativa de deixar saldo negativo para {telegram_id}.")
+                # Do not rollback here, just signal failure
                 return False
+            # <<< MODIFIED BLOCK END >>>
+
             cursor.execute("UPDATE users SET balance = %s WHERE telegram_id = %s", (new_balance, telegram_id))
             if not conn_ext: conn.commit()
             logger.info(f"💰 Saldo de {telegram_id} atualizado. De R${current_balance:.2f} para R${new_balance:.2f} (Mudança: {amount_change:+.2f}).")
