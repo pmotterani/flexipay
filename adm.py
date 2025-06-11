@@ -15,6 +15,16 @@ import pay
 logger = logging.getLogger(__name__)
 bot = None  # Instância global do bot, inicializada por register_admin_handlers
 
+def get_admin_menu_markup():
+    """Cria e retorna o markup do menu principal de administração."""
+    markup = InlineKeyboardMarkup(row_width=1)
+    btn_pending = InlineKeyboardButton("💰 Ver Saques Pendentes", callback_data="admin_view_pending")
+    btn_profit = InlineKeyboardButton("📈 Ver Lucro com Taxas", callback_data="admin_view_profit")
+    btn_manage_users = InlineKeyboardButton("👤 Administrar Saldo de Usuário", callback_data="admin_user_menu")
+    btn_view_balances = InlineKeyboardButton("👥 Ver Saldos de Usuários", callback_data="admin_view_balances")
+    markup.add(btn_pending, btn_profit, btn_manage_users, btn_view_balances)
+    return markup
+
 def register_admin_handlers(bot_instance):
     """
     Registra todos os handlers de comandos e callbacks relacionados ao admin.
@@ -26,9 +36,56 @@ def register_admin_handlers(bot_instance):
         """Verifica se um ID de usuário pertence a um administrador."""
         return user_id in config.ADMIN_TELEGRAM_IDS
 
-    # ... (handlers de saque e lucro permanecem os mesmos) ...
+    @bot.message_handler(commands=['admin', 'adm'])
+    def handle_admin_command(message):
+        """Exibe o painel de administração se o usuário for um admin."""
+        if not is_admin(message.from_user.id):
+            bot.reply_to(message, "❌ Acesso negado. Este comando é restrito.")
+            return
 
-    # <<< COMANDO NOVO ADICIONADO >>>
+        logger.info(f"👑 Admin {message.from_user.id} acessou o painel.")
+        bot.send_message(message.chat.id, "⚙️ *Painel do Administrador*", reply_markup=get_admin_menu_markup(), parse_mode="Markdown")
+
+    # <<< START: NEW FUNCTIONALITY TO FIX THE ISSUE >>>
+    @bot.callback_query_handler(func=lambda call: call.data == "admin_view_profit")
+    def handle_view_profit(call):
+        """Calcula e exibe o lucro total com taxas."""
+        if not is_admin(call.from_user.id):
+            bot.answer_callback_query(call.id, "❌ Ação não permitida!", show_alert=True)
+            return
+
+        bot.answer_callback_query(call.id, "Calculando lucro...")
+        
+        try:
+            total_profit = database.calculate_profits()
+            profit_message = (
+                f"📈 *Lucro Total com Taxas*\n\n"
+                f"O lucro total acumulado com taxas de depósito e saque é de:\n\n"
+                f"💰 *R$ {total_profit:.2f}*"
+            )
+            
+            markup = InlineKeyboardMarkup()
+            btn_back = InlineKeyboardButton("⬅️ Voltar ao Menu", callback_data="admin_back_to_menu")
+            markup.add(btn_back)
+
+            bot.edit_message_text(profit_message, call.message.chat.id, call.message.message_id, parse_mode="Markdown", reply_markup=markup)
+        
+        except Exception as e:
+            logger.error(f"Erro ao calcular/exibir lucro: {e}", exc_info=True)
+            bot.answer_callback_query(call.id, "❌ Erro ao buscar lucro.", show_alert=True)
+
+    @bot.callback_query_handler(func=lambda call: call.data == "admin_back_to_menu")
+    def handle_back_to_admin_menu(call):
+        """Retorna ao painel de administração principal."""
+        if not is_admin(call.from_user.id):
+            bot.answer_callback_query(call.id, "❌ Ação não permitida!", show_alert=True)
+            return
+        
+        bot.answer_callback_query(call.id)
+        bot.edit_message_text("⚙️ *Painel do Administrador*", call.message.chat.id, call.message.message_id, reply_markup=get_admin_menu_markup(), parse_mode="Markdown")
+    # <<< END: NEW FUNCTIONALITY TO FIX THE ISSUE >>>
+    
+    # ... (o restante do arquivo, como handle_set_saldo_command, handle_view_balances, etc., permanece o mesmo) ...
     @bot.message_handler(commands=['setsaldo'])
     def handle_set_saldo_command(message):
         """Inicia o fluxo de alteração de saldo via comando."""
@@ -40,24 +97,6 @@ def register_admin_handlers(bot_instance):
         msg = bot.reply_to(message, "👤 Por favor, envie o `ID do Telegram` do usuário para alterar o saldo.")
         bot.register_next_step_handler(msg, process_user_id_for_balance)
 
-    @bot.message_handler(commands=['admin', 'adm'])
-    def handle_admin_command(message):
-        """Exibe o painel de administração se o usuário for um admin."""
-        if not is_admin(message.from_user.id):
-            bot.reply_to(message, "❌ Acesso negado. Este comando é restrito.")
-            return
-
-        logger.info(f"👑 Admin {message.from_user.id} acessou o painel.")
-        markup = InlineKeyboardMarkup(row_width=1)
-        btn_pending = InlineKeyboardButton("💰 Ver Saques Pendentes", callback_data="admin_view_pending")
-        btn_profit = InlineKeyboardButton("📈 Ver Lucro com Taxas", callback_data="admin_view_profit")
-        btn_manage_users = InlineKeyboardButton("👤 Administrar Saldo de Usuário", callback_data="admin_user_menu")
-        # <<< BOTÃO NOVO ADICIONADO >>>
-        btn_view_balances = InlineKeyboardButton("👥 Ver Saldos de Usuários", callback_data="admin_view_balances")
-        markup.add(btn_pending, btn_profit, btn_manage_users, btn_view_balances)
-        bot.send_message(message.chat.id, "⚙️ *Painel do Administrador*", reply_markup=markup, parse_mode="Markdown")
-        
-    # <<< HANDLER DE CALLBACK NOVO >>>
     @bot.callback_query_handler(func=lambda call: call.data == "admin_view_balances")
     def handle_view_balances(call):
         """Busca e exibe todos os usuários com saldo > 0."""
@@ -81,9 +120,6 @@ def register_admin_handlers(bot_instance):
                 f"   - Saldo: *R$ {user['balance']:.2f}*\n"
             )
         
-        # O Telegram tem um limite de 4096 caracteres por mensagem.
-        # Se a lista for muito grande, será necessário paginar.
-        # Para a maioria dos casos, isso será suficiente.
         try:
             bot.edit_message_text(message_text, call.message.chat.id, call.message.message_id, parse_mode="Markdown")
         except telebot.apihelper.ApiTelegramException as e:
@@ -135,7 +171,6 @@ def register_admin_handlers(bot_instance):
         if not is_admin(admin_id): return
         
         try:
-            # Substitui vírgula por ponto para aceitar ambos formatos
             new_balance = float(message.text.replace(',', '.'))
             if new_balance < 0:
                 bot.reply_to(message, "❌ O saldo não pode ser negativo. Operação cancelada.")
@@ -158,9 +193,6 @@ def register_admin_handlers(bot_instance):
             bot.reply_to(message, f"❌ Erro! Não foi possível atualizar o saldo para `{target_user_id}`. Verifique os logs.")
             logger.error(f"Falha ao definir saldo para {target_user_id} por {admin_id}.")
 
-    # -------------------------------------
-    # HANDLER PARA AÇÕES DE SAQUE (APROVAR/REJEITAR)
-    # -------------------------------------
     @bot.callback_query_handler(func=lambda call: call.data.startswith("admin_withdraw_"))
     def handle_admin_withdrawal_action(call):
         """Processa a aprovação ou rejeição de uma solicitação de saque."""
@@ -234,7 +266,6 @@ def register_admin_handlers(bot_instance):
             else:
                 logger.critical(f"🆘 CRÍTICO: FALHA AO ESTORNAR saldo para o saque rejeitado {transaction_id} (Admin: {admin_id}). INTERVENÇÃO MANUAL URGENTE!")
                 bot.edit_message_text(f"🆘 *CRÍTICO:* Saque ID `{transaction_id}` rejeitado, MAS FALHOU AO ESTORNAR O SALDO. Contate o suporte técnico imediatamente!", call.message.chat.id, call.message.message_id)
-
 
 def notify_admin_of_withdrawal_request(transaction_id, user_telegram_id, user_first_name, amount, pix_key, target_admin_id=None):
     """
